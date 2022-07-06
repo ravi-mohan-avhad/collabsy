@@ -1,0 +1,15 @@
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <a class="navbar-brand" href="/">
+	<span style="font-size:30px;cursor:pointer; font-size:14px; font-family:verdana" onclick="openNav()"><!--<img src="https://texttosignlanguage.s3.jp-tok.cloud-object-storage.appdomain.cloud/ibm.JPG" height="20" width="50" /> -->☰&nbsp;&nbsp;&nbsp;Collabsy <span style="font-size:10px;"></span>
+	
+	<span style="font-size:10px;">- Look beyond the Horizon</span>
+
+    <div class="btn-group ml-auto dropleft">
+        <% if (isAuthenticated) { %>
+            <a class="btn btn-secondary" href="/id" role="button">ID</a>
+            <a class="btn btn-success" href="/signout" role="button">Sign-out</a>
+        <% } else { %>
+            <a class="btn btn-secondary" href="/signin" role="button">Sign-in</a>
+        <% } %>
+    </div>
+</nav>

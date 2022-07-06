@@ -1,0 +1,227 @@
+/*
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
+
+const express = require('express');
+const session = require('express-session');
+const path = require('path');
+
+const MsIdExpress = require('microsoft-identity-express');
+const appSettings = require('./appSettings.js');
+
+const mainController = require('./controllers/mainController');
+
+const SERVER_PORT = process.env.PORT || 4000;
+
+
+
+// initialize express
+const app = express(); 
+let server = require( 'http' ).Server( app );
+let io = require( 'socket.io' )( server );
+let stream = require( './ws/stream' );
+let favicon = require( 'serve-favicon' );
+app.use( favicon( path.join( __dirname, 'favicon.ico' ) ) );
+app.use( '/assets', express.static( path.join( __dirname, 'assets' ) ) );
+var cfenv = require('cfenv');
+
+app.set('views', path.join(__dirname, './views'));
+app.set('view engine', 'ejs');
+
+app.use('/css', express.static(path.join(__dirname, 'node_modules/bootstrap/dist/css')));
+app.use('/js', express.static(path.join(__dirname, 'node_modules/bootstrap/dist/js')));
+
+app.use(express.static(path.join(__dirname, './public')));
+
+/**
+ * Using express-session middleware. Be sure to familiarize yourself with available options
+ * and set them as desired. Visit: https://www.npmjs.com/package/express-session
+ */
+app.use(session({
+    secret: 'koI8Q~ZKD.zXm7L5Yx30J356e5dJcFWYehdlQaFr',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false, // set this to true on production
+    }
+}));
+
+// instantiate the wrapper
+const msid = new MsIdExpress.WebAppAuthClientBuilder(appSettings).build();
+
+// initialize the wrapper
+app.use(msid.initialize());
+
+// app routes
+app.get('/', (req, res) => res.redirect('/bridge'));
+
+
+
+app.get('/home', mainController.getHomePage);
+app.get( '/bridge', ( req, res ) => {
+    res.sendFile( __dirname + '/index.html' );
+} );
+
+// authentication routes
+app.get('/signin', 
+    msid.signIn({
+        postLoginRedirect: '/'
+    }
+));
+
+app.get('/signout', 
+    msid.signOut({
+        postLogoutRedirect: '/'
+    }
+));
+
+// secure routes
+app.get('/id', 
+    msid.isAuthenticated(), 
+    mainController.getIdPage
+);
+
+// unauthorized
+app.get('/error', (req, res) => res.redirect('/500.html'));
+
+// error
+app.get('/unauthorized', (req, res) => res.redirect('/401.html'));
+
+// 404
+app.get('*', (req, res) => res.status(404).redirect('/404.html'));
+
+app.get('/transcript_old',(req, res) => {
+	let fetch = require("node-fetch");
+var options = {
+  "method": "GET",
+  "headers": {
+    "Ocp-Apim-Subscription-Key": "<<KEY>>",
+   "Content-Type": "application/json"
+  }
+};
+fetch('https://api.videoindexer.ai/Auth/trial/Accounts?generateAccessTokens=true&allowEdit=False',options).then(res => res.json())
+    .then((jsontoken) => {
+   console.log(jsontoken[0].accessToken);
+   fetch('https://api.videoindexer.ai/trial/accounts/df0b84da-409e-4f5e-9015-45a3e014f181/videos/e5d3d478cb/Index?accessToken='+jsontoken[0].accessToken)
+  .then((res) => { 
+    return res.json() 
+  })
+  .then((jsonData) => {
+   console.log(jsonData);
+let text="<H1> Transcript from Meeting Number 629956</h1><br><br><table>"
+for(var i = 0;i< jsonData.videos[0].insights.transcript.length;i++)
+{
+  
+    text=text+"<tr><td> <b>Start Time: </b>"+(jsonData.videos[0].insights.transcript[i].instances[0].adjustedStart)+"</td><td> <b>Text: </b>"+(jsonData.videos[0].insights.transcript[i].text)+'</td></tr>';
+}
+text=text+"</table>";
+console.log(text);
+res.send(text);
+  })
+  .catch((err) => {
+    // handle error for example
+    console.error(err);
+  });
+  });
+});
+
+app.get('/email', (req, res) => {
+	
+	const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey('<<KEY>>');
+			
+			let length1= 16;
+  
+  var html="<!DOCTYPE html><html><head><style>table {  font-family: arial, sans-serif;  border-collapse: collapse;  width: 100%;}td, th {  border: 1px solid black;  text-align: center;  padding: 8px;}tr:nth-child(even) {  background-color:#ddd;}</style></head><body><h2 style='color:blue'>Attentiveness Report Based on Face</h2><table style='border: 1px solid black;'>  <tr style='color:black;'>    <th>Number of Attendees</th>    <th>Attentiveness Level</th>    <th>Angerness Level</th><th>Contempt Level</th><th>Disgust Level</th> <th>Fear Level</th><th>Neutral Level</th><th>Sadness Level</th><th>Surprise Level</th> <th>Wearing Glass</th></tr>  ";
+
+html=html+"<tr><td style='text-align: center;'><p style='font-size:12px;text-align: center;'><pre> 16 </td>"; 
+html=html+"<td style='text-align: center;'>  0.8215</td>";
+html=html+"<td style='text-align: center;'>  0.00019</td>";
+html=html+"<td style='text-align: center;'>  0.00263</td>";
+html=html+"<td style='text-align: center;'>  0</td>";
+html=html+"<td style='text-align: center;'>  0</td>";
+html=html+"<td style='text-align: center;'>  0.1755</td>";
+html=html+"<td style='text-align: center;'>  0.00013</td>";
+html=html+"<td style='text-align: center;'> 0.00006</td>";
+html=html+"<td style='text-align: center;'>  1 </td>";
+html=html+"</td></tr></table><br>";
+html=html+"<h2 style='color:blue'>Attentiveness Report based on Voice</h2>";
+let html2="";
+let fetch = require("node-fetch");
+var options = {
+  "method": "GET",
+  "headers": {
+    "Ocp-Apim-Subscription-Key": "<<KEY>>",
+   "Content-Type": "application/json"
+  }
+};
+fetch('https://api.videoindexer.ai/Auth/trial/Accounts?generateAccessTokens=true&allowEdit=False',options).then(res => res.json())
+    .then((jsontoken) => {
+   console.log(jsontoken[0].accessToken);
+   fetch('https://api.videoindexer.ai/trial/accounts/df0b84da-409e-4f5e-9015-45a3e014f181/videos/e5d3d478cb/Index?accessToken='+jsontoken[0].accessToken)
+  .then((res) => { 
+    return res.json() 
+  })
+  .then((jsonData) => {
+   console.log(jsonData.summarizedInsights.sentiments[1].seenDurationRatio);
+    console.log(jsonData.summarizedInsights.emotions[0].seenDurationRatio);
+	html2=html2+"<table style='border: 1px solid black;'>  <tr style='color:black;'>    <th>Number of Attendees</th>    <th>Neutral Level</th>    <th>Fear Level</th></tr>  ";
+    html2=html2+"<tr><td style='text-align: center;'><p style='font-size:12px;text-align: center;'><pre> "+length1+"</td>"; 
+    html2=html2+"<td style='text-align: center;'>"+jsonData.summarizedInsights.sentiments[1].seenDurationRatio+"</td>";
+
+html2=html2+"<td style='text-align: center;'>"+jsonData.summarizedInsights.emotions[0].seenDurationRatio+"</td>";
+
+html2=html2+"</tr></table><br><br>Transcript URL: -<BR><a href='https://ibm-bridge.eu-gb.mybluemix.net/transcript'>https://ibm-bridge.eu-gb.mybluemix.net/transcript</a></body>";
+const msg = {
+  to: 'saurabhksinha900@gmail.com',
+  from: 'ibm-bridge@ibm.com',
+  subject: 'Attentiveness Report of Meeting Number 629956',
+  text: 'Attentiveness Report',
+  html: html+html2
+  };
+
+sgMail.send(msg);
+var email=html+html2;
+  
+  res.write(email);
+  res.end();
+  })
+  .catch((err) => {
+    // handle error for examples
+    console.error(err);
+  });
+  });
+
+  });
+  
+ 
+ 
+
+app.get('/render',(req,res)=>{
+    res.sendFile(__dirname +"/index1.html");
+});
+app.get( '/videos', ( req, res ) => {
+    res.sendFile( __dirname + '/index2.html' );
+} );
+app.get( '/recordings', ( req, res ) => {
+    res.sendFile( __dirname + '/recordings.html' );
+} );
+app.get( '/video', ( req, res ) => {
+    res.sendFile( __dirname + '/video.html' );
+} );
+app.get('/teams',(req,res)=>{
+    res.sendFile(__dirname +"/msteams.html");
+});
+
+io.of( '/stream' ).on( 'connection', stream );
+var appEnv = cfenv.getAppEnv();
+server.listen(appEnv.port, '0.0.0.0', function() {
+
+	// print a message when the server starts listening
+  console.log("server starting on " + appEnv.url);
+});
+
+app.listen(SERVER_PORT, () => console.log(`Msal Node Auth Code Sample app listening on port ${SERVER_PORT}!`));
+
+module.exports = app;
